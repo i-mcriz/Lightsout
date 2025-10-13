@@ -231,7 +231,22 @@ public class GameScene {
 
         // Key movement
         final boolean[] up = {false}, down = {false}, left = {false}, right = {false};
+        final boolean[] playerFrozen = {false};  // Flag to freeze player at door
+        final boolean[] waitingForInput = {false};  // Flag to wait for user input after puzzle
+        
         finalScene.setOnKeyPressed(e -> {
+            // If waiting for input after puzzle, any movement key unfreezes the player
+            if (waitingForInput[0]) {
+                if (e.getCode() == KeyCode.W || e.getCode() == KeyCode.UP ||
+                    e.getCode() == KeyCode.S || e.getCode() == KeyCode.DOWN ||
+                    e.getCode() == KeyCode.A || e.getCode() == KeyCode.LEFT ||
+                    e.getCode() == KeyCode.D || e.getCode() == KeyCode.RIGHT) {
+                    waitingForInput[0] = false;
+                    playerFrozen[0] = false;
+                    System.out.println("Player unfrozen - movement key pressed");
+                }
+            }
+            
             if (e.getCode() == KeyCode.W || e.getCode() == KeyCode.UP) up[0] = true;
             if (e.getCode() == KeyCode.S || e.getCode() == KeyCode.DOWN) down[0] = true;
             if (e.getCode() == KeyCode.A || e.getCode() == KeyCode.LEFT) left[0] = true;
@@ -253,12 +268,16 @@ public class GameScene {
                 if (paused) return;
 
                 double dx = 0, dy = 0;
-                if (up[0]) dy -= speed;
-                if (down[0]) dy += speed;
-                if (left[0]) dx -= speed;
-                if (right[0]) dx += speed;
-
-                player.move(dx, dy, map);
+                
+                // Only process movement if player is not frozen
+                if (!playerFrozen[0]) {
+                    if (up[0]) dy -= speed;
+                    if (down[0]) dy += speed;
+                    if (left[0]) dx -= speed;
+                    if (right[0]) dx += speed;
+                    
+                    player.move(dx, dy, map);
+                }
 
                 // Check puzzle doors (only if no dialog is currently open)
                 if (!dialogOpen) {
@@ -266,6 +285,9 @@ public class GameScene {
                         if (!door.isSolved() && map.isOnTile(player.getCenterX(), player.getCenterY(),
                                 door.getPuzzle().getRow(), door.getPuzzle().getCol())) {
                             dialogOpen = true;
+                            playerFrozen[0] = true;  // Freeze player at door
+                            System.out.println("Player stopped at door - puzzle triggered");
+                            
                             // Show puzzle dialog - game loop continues running
                             door.trigger(stage, (Boolean solved) -> {
                                 System.out.println("GameScene: puzzle callback for " + door.getPuzzle().getId() + " solved=" + solved);
@@ -290,15 +312,42 @@ public class GameScene {
                                     if (marksManager.isGameComplete()) {
                                         showFinalScoreScreen();
                                     } else {
-                                        // Allow next puzzle to trigger
+                                        // Wait for user input to continue
+                                        waitingForInput[0] = true;
                                         dialogOpen = false;
+                                        System.out.println("Puzzle solved - waiting for movement input to continue");
                                     }
                                 } else {
                                     // Reduce mark for wrong answer
                                     marksManager.reduceMark();
                                     System.out.println("GameScene: puzzle failed — Final Score: " + marksManager);
-                                    // Show final score and return to menu
-                                    showFinalScoreScreen();
+                                    
+                                    // Wait for user input before showing final score
+                                    waitingForInput[0] = true;
+                                    dialogOpen = false;
+                                    System.out.println("Puzzle failed - waiting for movement input to continue");
+                                    
+                                    // Add a small delay then show final score
+                                    javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
+                                    pause.setOnFinished(ev -> {
+                                        if (!waitingForInput[0]) {  // User pressed a key
+                                            showFinalScoreScreen();
+                                        } else {
+                                            // Wait for key press, then show final score
+                                            final boolean[] keyPressed = {false};
+                                            finalScene.setOnKeyPressed(keyEvent -> {
+                                                if (!keyPressed[0] && 
+                                                    (keyEvent.getCode() == KeyCode.W || keyEvent.getCode() == KeyCode.UP ||
+                                                     keyEvent.getCode() == KeyCode.S || keyEvent.getCode() == KeyCode.DOWN ||
+                                                     keyEvent.getCode() == KeyCode.A || keyEvent.getCode() == KeyCode.LEFT ||
+                                                     keyEvent.getCode() == KeyCode.D || keyEvent.getCode() == KeyCode.RIGHT)) {
+                                                    keyPressed[0] = true;
+                                                    showFinalScoreScreen();
+                                                }
+                                            });
+                                        }
+                                    });
+                                    pause.play();
                                 }
                             });
                             // only handle one dialog per frame
