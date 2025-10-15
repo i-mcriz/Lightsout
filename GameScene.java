@@ -42,10 +42,18 @@ public class GameScene {
     // Prevent multiple dialogs / reentrancy while a puzzle is active
     private boolean dialogOpen = false;
     
+    // NEW: Exit barrier to block exit until all puzzles solved
+    private javafx.scene.Node exitBarrier = null;
+    private boolean exitUnlocked = false;
+    private boolean exitMessageShown = false; // Prevent message spam
+    
     // NEW: Marks system and database integration
     private MarksManager marksManager;
     private DatabaseManager databaseManager;
     private Text marksText;  // HUD display for marks
+    
+    // NEW: Flickering light effect
+    private FlickeringLight lightEffect;
 
     private static final double BUTTON_WIDTH = Start.BUTTON_WIDTH;
     private static final double BUTTON_HEIGHT = Start.BUTTON_HEIGHT;
@@ -76,6 +84,11 @@ public class GameScene {
     }
 
     private void loadLevel(int levelNum) {
+        // Reset game state for new level
+        exitUnlocked = false;
+        exitBarrier = null;
+        dialogOpen = false;
+        
         Pane gameLayer = new Pane();
         gameLayer.setPrefSize(800, 600);
         gameLayer.setStyle("-fx-background-color: white;");
@@ -108,7 +121,7 @@ public class GameScene {
             }
         }
 
-    player = new Player(startX, startY, 30);
+        player = new Player(startX, startY, 20);
     // Create a dedicated layer for doors so they render above the map but below the player
     // assign to field so other methods can access it
     doorsLayer = new Pane();
@@ -174,6 +187,60 @@ public class GameScene {
         doorVisualMap.put(door, g);
         System.out.println("Placed door visual at row=" + tr + " col=" + tc + " -> x=" + (map.getLayoutX()+x) + " y=" + (map.getLayoutY()+y));
     }
+    
+        // Create EXIT BARRIER - blocks exit until all puzzles solved
+        // Reuse the layout array that was already defined
+        int exitRow = -1, exitCol = -1;
+        // Find exit tile (marked with 2)
+        outerExit:
+        for (int r = 0; r < map.getRows(); r++) {
+            for (int c = 0; c < map.getCols(); c++) {
+                if (layout[r][c] == 2) {
+                    exitRow = r;
+                    exitCol = c;
+                    break outerExit;
+                }
+            }
+        }
+        
+        if (exitRow != -1 && exitCol != -1) {
+            double exitX = exitCol * map.getTileSize();
+            double exitY = exitRow * map.getTileSize();
+            double pad = 2;
+            
+            // Create locked barrier with chains/lock visual
+            javafx.scene.shape.Rectangle barrierRect = new javafx.scene.shape.Rectangle(
+                exitX + pad, exitY + pad,
+                map.getTileSize() - pad*2, map.getTileSize() - pad*2);
+            
+            // Red gradient for locked barrier
+            javafx.scene.paint.LinearGradient lockGradient = new javafx.scene.paint.LinearGradient(
+                0, 0, 1, 1, true, javafx.scene.paint.CycleMethod.NO_CYCLE,
+                new javafx.scene.paint.Stop(0, javafx.scene.paint.Color.DARKRED),
+                new javafx.scene.paint.Stop(1, javafx.scene.paint.Color.RED)
+            );
+            barrierRect.setFill(lockGradient);
+            barrierRect.setStroke(javafx.scene.paint.Color.DARKRED);
+            barrierRect.setStrokeWidth(4);
+            barrierRect.setOpacity(0.9);
+            
+            // Add lock icon
+            javafx.scene.text.Text lockIcon = new javafx.scene.text.Text("🔒");
+            lockIcon.setStyle("-fx-font-size: 24px;");
+            lockIcon.setX(exitX + map.getTileSize() * 0.3);
+            lockIcon.setY(exitY + map.getTileSize() * 0.6);
+            
+            javafx.scene.text.Text lockLabel = new javafx.scene.text.Text("LOCKED");
+            lockLabel.setFill(javafx.scene.paint.Color.WHITE);
+            lockLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+            lockLabel.setX(exitX + map.getTileSize() * 0.15);
+            lockLabel.setY(exitY + map.getTileSize() * 0.8);
+            
+            exitBarrier = new javafx.scene.Group(barrierRect, lockIcon, lockLabel);
+            doorsLayer.getChildren().add(exitBarrier);
+            exitUnlocked = false;
+            System.out.println("🔒 Exit barrier created at row=" + exitRow + " col=" + exitCol);
+        }
 
         // HUD
         Text levelText = new Text("Level " + levelNum);
@@ -182,41 +249,126 @@ public class GameScene {
         StackPane.setAlignment(levelText, Pos.TOP_LEFT);
         StackPane.setMargin(levelText, new Insets(10));
         
-        // NEW: Marks display HUD
+        // NEW: Marks display HUD - Initially hidden, only shown at exit
         marksText = new Text("Score: 0/5 | Questions: 0/5");
         marksText.setFill(Color.DARKGREEN);
         marksText.setFont(Font.font("Consolas", 18));
         marksText.setStyle("-fx-font-weight: bold;");
+        marksText.setVisible(false);  // Hide marks during gameplay
         StackPane.setAlignment(marksText, Pos.TOP_CENTER);
         StackPane.setMargin(marksText, new Insets(10));
         
-        // Bind marks display to MarksManager properties
+        // Bind marks display to MarksManager properties (for when it's shown)
         marksManager.marksProperty().addListener((obs, oldVal, newVal) -> updateMarksDisplay());
         marksManager.questionsAnsweredProperty().addListener((obs, oldVal, newVal) -> updateMarksDisplay());
         updateMarksDisplay();
 
-        // Pause button
+        // Pause button - blend with overlay with visible white lines
         Button pauseBtn = new Button("II");
         pauseBtn.setPrefSize(40, 40);
         pauseBtn.setFont(Font.font(18));
+        pauseBtn.setStyle(
+            "-fx-background-color: rgba(0, 0, 0, 0.7);" +  // Match overlay color
+            "-fx-text-fill: white;" +
+            "-fx-border-color: transparent;" +
+            "-fx-background-radius: 5;"
+        );
         StackPane.setAlignment(pauseBtn, Pos.TOP_RIGHT);
         StackPane.setMargin(pauseBtn, new Insets(10));
 
         VBox pauseMenu = new VBox(GAP_PX);
         pauseMenu.setAlignment(Pos.CENTER);
-        pauseMenu.setStyle("-fx-background-color: rgba(0,0,0,0.6); -fx-padding: 20; -fx-background-radius: 15;");
+        pauseMenu.setStyle("-fx-background-color: rgba(0,0,0,0.95); -fx-padding: 40; -fx-background-radius: 15;");
         pauseMenu.setVisible(false);
 
-        Button resumeBtn = new Button("Resume");
-        resumeBtn.setPrefSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-        Button restartBtn = new Button("Restart Level");
-        restartBtn.setPrefSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-        Button exitBtn = new Button("Exit to Menu");
-        exitBtn.setPrefSize(BUTTON_WIDTH, BUTTON_HEIGHT);
+        Button resumeBtn = Start.createAgentButton("Resume");
+        Button restartBtn = Start.createAgentButton("Restart Level");
+        Button exitBtn = Start.createAgentButton("Exit to Menu");
+        
+        // Override button text color to white for dark background
+        resumeBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        );
+        resumeBtn.setOnMouseEntered(e -> resumeBtn.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
+        resumeBtn.setOnMouseExited(e -> resumeBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
+        
+        restartBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        );
+        restartBtn.setOnMouseEntered(e -> restartBtn.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
+        restartBtn.setOnMouseExited(e -> restartBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
+        
+        exitBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        );
+        exitBtn.setOnMouseEntered(e -> exitBtn.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
+        exitBtn.setOnMouseExited(e -> exitBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
 
-        pauseMenu.getChildren().addAll(resumeBtn, restartBtn, exitBtn);
+    pauseMenu.getChildren().addAll(resumeBtn, restartBtn, exitBtn);
 
-        StackPane gameStack = new StackPane(gameLayer, levelText, marksText, pauseBtn, pauseMenu);
+        // NEW: Create canvas for light effect overlay
+        javafx.scene.canvas.Canvas lightCanvas = new javafx.scene.canvas.Canvas(800, 600);
+        lightCanvas.setMouseTransparent(true); // Don't block mouse events
+        lightEffect = new FlickeringLight(player.getTranslateX(), player.getTranslateY(), 50);  // 50px radius = 100x100 cutout
+        
+        StackPane gameStack = new StackPane(gameLayer, lightCanvas, levelText, marksText, pauseBtn, pauseMenu);
         Scene finalScene = new Scene(gameStack, 800, 600);
 
         pauseBtn.setOnAction(e -> togglePause(pauseMenu));
@@ -224,29 +376,46 @@ public class GameScene {
         restartBtn.setOnAction(e -> {
             pauseMenu.setVisible(false);
             paused = false;
-            timer.stop();
+            if (timer != null) {
+                timer.stop();
+            }
+            // Reset marks and progress
+            marksManager.reset();
+            System.out.println("Game restarted - progress reset");
             loadLevel(currentLevel);
         });
         exitBtn.setOnAction(e -> Start.showStartMenu(stage, musicPlayer, musicVolume, soundVolume, musicOn, soundOn));
 
-        // Key movement
-        final boolean[] up = {false}, down = {false}, left = {false}, right = {false};
         final boolean[] playerFrozen = {false};  // Flag to freeze player at door
         final boolean[] waitingForInput = {false};  // Flag to wait for user input after puzzle
+        final boolean[] up = {false};
+        final boolean[] down = {false};
+        final boolean[] left = {false};
+        final boolean[] right = {false};
         
         finalScene.setOnKeyPressed(e -> {
-            // If waiting for input after puzzle, any movement key unfreezes the player
-            if (waitingForInput[0]) {
-                if (e.getCode() == KeyCode.W || e.getCode() == KeyCode.UP ||
-                    e.getCode() == KeyCode.S || e.getCode() == KeyCode.DOWN ||
-                    e.getCode() == KeyCode.A || e.getCode() == KeyCode.LEFT ||
-                    e.getCode() == KeyCode.D || e.getCode() == KeyCode.RIGHT) {
-                    waitingForInput[0] = false;
-                    playerFrozen[0] = false;
-                    System.out.println("Player unfrozen - movement key pressed");
+            // Don't process keys if player is frozen or waiting for input
+            if (playerFrozen[0] || waitingForInput[0]) {
+                // If waiting for input after puzzle, any movement key unfreezes the player
+                if (waitingForInput[0]) {
+                    if (e.getCode() == KeyCode.W || e.getCode() == KeyCode.UP ||
+                        e.getCode() == KeyCode.S || e.getCode() == KeyCode.DOWN ||
+                        e.getCode() == KeyCode.A || e.getCode() == KeyCode.LEFT ||
+                        e.getCode() == KeyCode.D || e.getCode() == KeyCode.RIGHT) {
+                        waitingForInput[0] = false;
+                        playerFrozen[0] = false;
+                        player.unfreeze();
+                        System.out.println("Player unfrozen - movement key pressed: " + e.getCode());
+                        // Fall through to set key states below instead of returning
+                    } else {
+                        return; // Other keys don't unfreeze
+                    }
+                } else {
+                    return; // Ignore all key inputs when frozen
                 }
             }
             
+            // Track key states for smooth movement only when not frozen
             if (e.getCode() == KeyCode.W || e.getCode() == KeyCode.UP) up[0] = true;
             if (e.getCode() == KeyCode.S || e.getCode() == KeyCode.DOWN) down[0] = true;
             if (e.getCode() == KeyCode.A || e.getCode() == KeyCode.LEFT) left[0] = true;
@@ -257,11 +426,17 @@ public class GameScene {
             if (e.getCode() == KeyCode.S || e.getCode() == KeyCode.DOWN) down[0] = false;
             if (e.getCode() == KeyCode.A || e.getCode() == KeyCode.LEFT) left[0] = false;
             if (e.getCode() == KeyCode.D || e.getCode() == KeyCode.RIGHT) right[0] = false;
+            
+            // Stop animation when all keys are released
+            if (!up[0] && !down[0] && !left[0] && !right[0]) {
+                player.stopMoving();
+            }
         });
 
         // Game loop
+        final javafx.scene.canvas.Canvas finalLightCanvas = lightCanvas;
         timer = new AnimationTimer() {
-            final double speed = 3.5;
+            final double speed = 2.8;  // Smoother, slightly slower speed
 
             @Override
             public void handle(long now) {
@@ -276,8 +451,23 @@ public class GameScene {
                     if (left[0]) dx -= speed;
                     if (right[0]) dx += speed;
                     
-                    player.move(dx, dy, map);
+                    player.move(dx, dy, map, exitUnlocked);
+                    
+                    // Update light position to follow player
+                    lightEffect.updatePosition(player.getTranslateX(), player.getTranslateY());
+                    
+                    // Explicitly stop player if no keys are pressed
+                    if (!up[0] && !down[0] && !left[0] && !right[0]) {
+                        player.stopMoving();
+                    }
+                } else {
+                    // Ensure player stays frozen and shows idle frame
+                    player.stopMoving();
                 }
+                
+                // Draw the light effect on the canvas
+                javafx.scene.canvas.GraphicsContext gc = finalLightCanvas.getGraphicsContext2D();
+                lightEffect.draw(gc, 800, 600);
 
                 // Check puzzle doors (only if no dialog is currently open)
                 if (!dialogOpen) {
@@ -286,7 +476,15 @@ public class GameScene {
                                 door.getPuzzle().getRow(), door.getPuzzle().getCol())) {
                             dialogOpen = true;
                             playerFrozen[0] = true;  // Freeze player at door
-                            System.out.println("Player stopped at door - puzzle triggered");
+                            player.freeze();  // Freeze animation and movement
+                            
+                            // Clear all key states to prevent automatic movement after puzzle
+                            up[0] = false;
+                            down[0] = false;
+                            left[0] = false;
+                            right[0] = false;
+                            
+                            System.out.println("🚪 Player at door (" + door.getPuzzle().getRow() + "," + door.getPuzzle().getCol() + ") - " + door.getPuzzle().getSubject());
                             
                             // Show puzzle dialog - game loop continues running
                             door.trigger(stage, (Boolean solved) -> {
@@ -310,7 +508,109 @@ public class GameScene {
                                     
                                     // Check if game is complete (all 5 questions answered)
                                     if (marksManager.isGameComplete()) {
-                                        showFinalScoreScreen();
+                                        // All questions answered - UNLOCK EXIT and guide player
+                                        System.out.println("🎉 All questions answered! Unlocking exit...");
+                                        
+                                        // Remove exit barrier
+                                        if (exitBarrier != null && doorsLayer != null && !exitUnlocked) {
+                                            doorsLayer.getChildren().remove(exitBarrier);
+                                            exitBarrier = null;
+                                            exitUnlocked = true;
+                                            System.out.println("🔓 Exit barrier removed - EXIT UNLOCKED");
+                                        }
+                                        
+                                        waitingForInput[0] = true;
+                                        dialogOpen = false;
+                                        
+                                        // Show notification that player should go to exit
+                                        javafx.application.Platform.runLater(() -> {
+                                            javafx.scene.control.Alert exitAlert = new javafx.scene.control.Alert(
+                                                javafx.scene.control.Alert.AlertType.INFORMATION);
+                                            exitAlert.setTitle("All Puzzles Complete!");
+                                            exitAlert.setHeaderText("🎉 Congratulations! 🔓");
+                                            exitAlert.setContentText(
+                                                "You've answered all questions!\n\n" +
+                                                "The EXIT has been UNLOCKED!\n\n" +
+                                                "Make your way to the exit to finish the game.");
+                                            
+                                            // Apply black background with white text styling
+                                            javafx.scene.control.DialogPane dialogPane = exitAlert.getDialogPane();
+                                            dialogPane.setStyle(
+                                                "-fx-background-color: black;" +
+                                                "-fx-font-family: 'Comic Sans MS';" +
+                                                "-fx-font-size: 16px;"
+                                            );
+                                            
+                                            // Style header
+                                            dialogPane.lookup(".header-panel").setStyle(
+                                                "-fx-background-color: black;"
+                                            );
+                                            javafx.scene.control.Label headerLabel = (javafx.scene.control.Label) dialogPane.lookup(".header-panel .label");
+                                            if (headerLabel != null) {
+                                                headerLabel.setStyle(
+                                                    "-fx-text-fill: white;" +
+                                                    "-fx-font-family: 'Comic Sans MS';" +
+                                                    "-fx-font-size: 20px;" +
+                                                    "-fx-font-weight: bold;"
+                                                );
+                                            }
+                                            
+                                            // Style content
+                                            dialogPane.lookup(".content").setStyle(
+                                                "-fx-background-color: black;"
+                                            );
+                                            javafx.scene.control.Label contentLabel = (javafx.scene.control.Label) dialogPane.lookup(".content .label");
+                                            if (contentLabel != null) {
+                                                contentLabel.setStyle(
+                                                    "-fx-text-fill: white;" +
+                                                    "-fx-font-family: 'Comic Sans MS';" +
+                                                    "-fx-font-size: 16px;"
+                                                );
+                                            }
+                                            
+                                            // Style button
+                                            javafx.scene.control.Button okButton = (javafx.scene.control.Button) dialogPane.lookupButton(javafx.scene.control.ButtonType.OK);
+                                            if (okButton != null) {
+                                                okButton.setStyle(
+                                                    "-fx-background-color: transparent;" +
+                                                    "-fx-text-fill: white;" +
+                                                    "-fx-font-family: 'Comic Sans MS';" +
+                                                    "-fx-font-size: 18px;" +
+                                                    "-fx-font-weight: bold;" +
+                                                    "-fx-border-color: white;" +
+                                                    "-fx-border-width: 2;" +
+                                                    "-fx-background-radius: 0;" +
+                                                    "-fx-border-radius: 0;" +
+                                                    "-fx-padding: 10 30 10 30;"
+                                                );
+                                                okButton.setOnMouseEntered(e -> okButton.setStyle(
+                                                    "-fx-background-color: white;" +
+                                                    "-fx-text-fill: black;" +
+                                                    "-fx-font-family: 'Comic Sans MS';" +
+                                                    "-fx-font-size: 18px;" +
+                                                    "-fx-font-weight: bold;" +
+                                                    "-fx-border-color: white;" +
+                                                    "-fx-border-width: 2;" +
+                                                    "-fx-background-radius: 0;" +
+                                                    "-fx-border-radius: 0;" +
+                                                    "-fx-padding: 10 30 10 30;"
+                                                ));
+                                                okButton.setOnMouseExited(e -> okButton.setStyle(
+                                                    "-fx-background-color: transparent;" +
+                                                    "-fx-text-fill: white;" +
+                                                    "-fx-font-family: 'Comic Sans MS';" +
+                                                    "-fx-font-size: 18px;" +
+                                                    "-fx-font-weight: bold;" +
+                                                    "-fx-border-color: white;" +
+                                                    "-fx-border-width: 2;" +
+                                                    "-fx-background-radius: 0;" +
+                                                    "-fx-border-radius: 0;" +
+                                                    "-fx-padding: 10 30 10 30;"
+                                                ));
+                                            }
+                                            
+                                            exitAlert.showAndWait();
+                                        });
                                     } else {
                                         // Wait for user input to continue
                                         waitingForInput[0] = true;
@@ -318,36 +618,19 @@ public class GameScene {
                                         System.out.println("Puzzle solved - waiting for movement input to continue");
                                     }
                                 } else {
-                                    // Reduce mark for wrong answer
-                                    marksManager.reduceMark();
-                                    System.out.println("GameScene: puzzle failed — Final Score: " + marksManager);
+                                    // Reduce mark for wrong answer (only once per door)
+                                    if (!door.isMarksDeducted()) {
+                                        marksManager.reduceMark();
+                                        door.setMarksDeducted(true);
+                                        System.out.println("GameScene: puzzle failed — Score: " + marksManager.getMarks() + "/" + marksManager.getTotalQuestions());
+                                    } else {
+                                        System.out.println("GameScene: puzzle failed but marks already deducted for this door");
+                                    }
                                     
-                                    // Wait for user input before showing final score
+                                    // Wait for user input to continue (don't show final score yet)
                                     waitingForInput[0] = true;
                                     dialogOpen = false;
                                     System.out.println("Puzzle failed - waiting for movement input to continue");
-                                    
-                                    // Add a small delay then show final score
-                                    javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
-                                    pause.setOnFinished(ev -> {
-                                        if (!waitingForInput[0]) {  // User pressed a key
-                                            showFinalScoreScreen();
-                                        } else {
-                                            // Wait for key press, then show final score
-                                            final boolean[] keyPressed = {false};
-                                            finalScene.setOnKeyPressed(keyEvent -> {
-                                                if (!keyPressed[0] && 
-                                                    (keyEvent.getCode() == KeyCode.W || keyEvent.getCode() == KeyCode.UP ||
-                                                     keyEvent.getCode() == KeyCode.S || keyEvent.getCode() == KeyCode.DOWN ||
-                                                     keyEvent.getCode() == KeyCode.A || keyEvent.getCode() == KeyCode.LEFT ||
-                                                     keyEvent.getCode() == KeyCode.D || keyEvent.getCode() == KeyCode.RIGHT)) {
-                                                    keyPressed[0] = true;
-                                                    showFinalScoreScreen();
-                                                }
-                                            });
-                                        }
-                                    });
-                                    pause.play();
                                 }
                             });
                             // only handle one dialog per frame
@@ -356,11 +639,74 @@ public class GameScene {
                     }
                 }
 
-                // Check exit
+                // Check if player is near exit tile (to show message when touching locked exit)
+                if (!exitUnlocked) {
+                    // Find exit tile and check distance
+                    int[][] layout = map.getLayout();
+                    for (int r = 0; r < map.getRows(); r++) {
+                        for (int c = 0; c < map.getCols(); c++) {
+                            if (layout[r][c] == 2) { // Exit tile
+                                double tileSize = map.getTileSize();
+                                double exitCenterX = map.getLayoutX() + c * tileSize + tileSize / 2.0;
+                                double exitCenterY = map.getLayoutY() + r * tileSize + tileSize / 2.0;
+                                
+                                double distX = player.getCenterX() - exitCenterX;
+                                double distY = player.getCenterY() - exitCenterY;
+                                double distance = Math.sqrt(distX * distX + distY * distY);
+                                
+                                // If player is very close to exit (touching it), show message once
+                                if (distance < tileSize * 0.8 && !exitMessageShown) {
+                                    exitMessageShown = true;
+                                    System.out.println("EXIT BLOCKED - Quiz is not over");
+                                    
+                                    // Show non-intrusive text message without taking focus
+                                    javafx.application.Platform.runLater(() -> {
+                                        javafx.scene.text.Text messageText = new javafx.scene.text.Text("Quiz is not over!");
+                                        messageText.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 28));
+                                        messageText.setFill(javafx.scene.paint.Color.RED);
+                                        messageText.setStroke(javafx.scene.paint.Color.WHITE);
+                                        messageText.setStrokeWidth(2);
+                                        
+                                        // Center it on screen
+                                        messageText.setLayoutX(400 - 100);
+                                        messageText.setLayoutY(100);
+                                        
+                                        gameStack.getChildren().add(messageText);
+                                        
+                                        // Auto-remove after 2 seconds
+                                        javafx.animation.PauseTransition pause = 
+                                            new javafx.animation.PauseTransition(javafx.util.Duration.seconds(2));
+                                        pause.setOnFinished(e -> gameStack.getChildren().remove(messageText));
+                                        pause.play();
+                                    });
+                                }
+                                
+                                // Reset message flag when player moves away
+                                if (distance > tileSize * 1.5) {
+                                    exitMessageShown = false;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Check exit - only allow if all questions are answered
                 if (map.isOnExit(player.getCenterX(), player.getCenterY())) {
-                    stop();
-                    currentLevel++;
-                    loadLevel(currentLevel);
+                    if (marksManager.isGameComplete()) {
+                        // All questions answered - show marks and allow exit
+                        System.out.println("EXIT UNLOCKED - Showing final score");
+                        stop();
+                        timer.stop();
+                        
+                        // Show marks display at exit
+                        if (marksText != null) {
+                            marksText.setVisible(true);
+                        }
+                        
+                        // Show final score screen
+                        showFinalScoreScreen();
+                    }
                 }
             }
         };
@@ -381,6 +727,15 @@ public class GameScene {
     private void togglePause(VBox pauseMenu) {
         paused = !paused;
         pauseMenu.setVisible(paused);
+        
+        // Pause/resume the light effect
+        if (lightEffect != null) {
+            if (paused) {
+                lightEffect.stop();
+            } else {
+                lightEffect.resume();
+            }
+        }
     }
 
     // Load puzzle doors from database (5 questions total)
@@ -438,42 +793,59 @@ public class GameScene {
             databaseManager.disconnect();
         }
         
-        // Create final score display
+        // Create final score display with black background and white text
         VBox scoreBox = new VBox(20);
         scoreBox.setAlignment(Pos.CENTER);
-        scoreBox.setStyle("-fx-background-color: rgba(255,255,255,0.95); -fx-padding: 40; -fx-background-radius: 15;");
+        scoreBox.setStyle("-fx-background-color: black; -fx-padding: 40; -fx-background-radius: 15;");
         
         Text titleText = new Text("🎯 Game Complete!");
-        titleText.setFont(Font.font("Consolas", 32));
-        titleText.setFill(Color.DARKBLUE);
+        titleText.setFont(Font.font("Comic Sans MS", 32));
+        titleText.setFill(Color.WHITE);
         titleText.setStyle("-fx-font-weight: bold;");
         
         Text scoreText = new Text(String.format("Final Score: %d / %d", 
                                    marksManager.getMarks(), marksManager.getTotalQuestions()));
-        scoreText.setFont(Font.font("Consolas", 28));
-        scoreText.setFill(Color.BLACK);
+        scoreText.setFont(Font.font("Comic Sans MS", 28));
+        scoreText.setFill(Color.WHITE);
         
         Text gradeText = new Text("Grade: " + marksManager.getGrade());
-        gradeText.setFont(Font.font("Consolas", 36));
+        gradeText.setFont(Font.font("Comic Sans MS", 36));
         gradeText.setStyle("-fx-font-weight: bold;");
-        // Color based on grade
-        String grade = marksManager.getGrade();
-        if (grade.equals("A+") || grade.equals("A")) {
-            gradeText.setFill(Color.DARKGREEN);
-        } else if (grade.equals("B") || grade.equals("C")) {
-            gradeText.setFill(Color.ORANGE);
-        } else {
-            gradeText.setFill(Color.DARKRED);
-        }
+        gradeText.setFill(Color.WHITE);
         
         Text detailsText = new Text(String.format("✓ Correct: %d | ✗ Wrong: %d | Percentage: %.0f%%",
                                     marksManager.getCorrectAnswers(),
                                     marksManager.getWrongAnswers(),
                                     marksManager.getPercentage()));
-        detailsText.setFont(Font.font("Consolas", 18));
-        detailsText.setFill(Color.DARKGRAY);
+        detailsText.setFont(Font.font("Comic Sans MS", 18));
+        detailsText.setFill(Color.WHITE);
         
         Button returnBtn = Start.createAgentButton("Return to Menu");
+        // Override button style for white text on black background
+        returnBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        );
+        returnBtn.setOnMouseEntered(e -> returnBtn.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
+        returnBtn.setOnMouseExited(e -> returnBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: white;" +
+            "-fx-border-width: 2;" +
+            "-fx-background-radius: 0;" +
+            "-fx-border-radius: 0;"
+        ));
         returnBtn.setOnAction(e -> {
             marksManager.reset();
             Start.showStartMenu(stage, musicPlayer, musicVolume, soundVolume, musicOn, soundOn);

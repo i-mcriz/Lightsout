@@ -36,6 +36,9 @@ public class Start extends Application {
 
     @Override
     public void start(Stage primaryStage) {
+        // Disable maximize button
+        primaryStage.setResizable(false);
+        
         // Create persistent music player once (first launch)
         if (musicPlayer == null) {
             Media musicMedia = new Media(getClass().getResource("music.mp3").toExternalForm());
@@ -59,17 +62,37 @@ public class Start extends Application {
                                      boolean soundOn) {
 
         // --- Background VIDEO (muted) ---
-        Media bgMedia = new Media(Start.class.getResource("background.mp4").toExternalForm());
-        MediaPlayer videoPlayer = new MediaPlayer(bgMedia);
-        videoPlayer.setCycleCount(MediaPlayer.INDEFINITE);
-        videoPlayer.setMute(true);
-        videoPlayer.play();
-
-        MediaView mediaView = new MediaView(videoPlayer);
-        mediaView.setPreserveRatio(false);
-        mediaView.setFitWidth(800);
-        mediaView.setFitHeight(600);
-        mediaView.setEffect(new GaussianBlur(20));
+        MediaView mediaView = null;
+        MediaPlayer videoPlayer = null;
+        
+        try {
+            java.net.URL videoUrl = Start.class.getResource("background.mp4");
+            if (videoUrl == null) {
+                // Try loading from file system as fallback
+                java.io.File videoFile = new java.io.File("background.mp4");
+                if (videoFile.exists()) {
+                    videoUrl = videoFile.toURI().toURL();
+                }
+            }
+            
+            if (videoUrl != null) {
+                Media bgMedia = new Media(videoUrl.toExternalForm());
+                videoPlayer = new MediaPlayer(bgMedia);
+                videoPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+                videoPlayer.setMute(true);
+                videoPlayer.play();
+                
+                mediaView = new MediaView(videoPlayer);
+                mediaView.setPreserveRatio(false);
+                mediaView.setFitWidth(800);
+                mediaView.setFitHeight(600);
+                mediaView.setEffect(new GaussianBlur(2));
+            } else {
+                System.err.println("Warning: background.mp4 not found. Menu will display without video.");
+            }
+        } catch (Exception e) {
+            System.err.println("Warning: Could not load background video: " + e.getMessage());
+        }
 
         // --- Buttons ---
         Button startBtn = createAgentButton("Start Game");
@@ -140,7 +163,12 @@ public class Start extends Application {
         );
         menuBox.setAlignment(Pos.CENTER);
 
-        StackPane root = new StackPane(mediaView, menuBox);
+        StackPane root;
+        if (mediaView != null) {
+            root = new StackPane(mediaView, menuBox);
+        } else {
+            root = new StackPane(menuBox);
+        }
         StackPane.setAlignment(menuBox, Pos.CENTER);
         StackPane.setMargin(menuBox, new Insets(0));
         root.setStyle("-fx-background-color: black;"); // safety: no white flash
@@ -158,6 +186,7 @@ public class Start extends Application {
         in.play();
 
         // Start -> Game
+        final MediaPlayer finalVideoPlayer = videoPlayer;
         startBtn.setOnAction(e -> {
             startBtn.setDisable(true);
             musicBtn.setDisable(true);
@@ -168,8 +197,10 @@ public class Start extends Application {
             out.setFromValue(1.0);
             out.setToValue(0.0);
             out.setOnFinished(evt -> {
-                videoPlayer.stop();
-                videoPlayer.dispose();
+                if (finalVideoPlayer != null) {
+                    finalVideoPlayer.stop();
+                    finalVideoPlayer.dispose();
+                }
 
                 new GameScene(stage, musicPlayer,
                         musicSlider.getValue(), soundSlider.getValue(),
@@ -184,28 +215,28 @@ public class Start extends Application {
     // --- Styling helpers (shared with GameScene) ---
     static Button createAgentButton(String text) {
         Button btn = new Button(text);
-        btn.setFont(Font.font("Consolas", 18)); // agentic
+        btn.setFont(Font.font("Comic Sans MS", 18)); // cartoonish
         btn.setPrefSize(BUTTON_WIDTH, BUTTON_HEIGHT);
         btn.setStyle(
             "-fx-background-color: transparent;" +
-            "-fx-text-fill: darkgoldenrod;" +
-            "-fx-border-color: darkgoldenrod;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: black;" +
             "-fx-border-width: 2;" +
             "-fx-background-radius: 0;" +
             "-fx-border-radius: 0;"
         );
         btn.setOnMouseEntered(e -> btn.setStyle(
             "-fx-background-color: white;" +
-            "-fx-text-fill: darkgoldenrod;" +
-            "-fx-border-color: darkgoldenrod;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: black;" +
             "-fx-border-width: 2;" +
             "-fx-background-radius: 0;" +
             "-fx-border-radius: 0;"
         ));
         btn.setOnMouseExited(e -> btn.setStyle(
             "-fx-background-color: transparent;" +
-            "-fx-text-fill: darkgoldenrod;" +
-            "-fx-border-color: darkgoldenrod;" +
+            "-fx-text-fill: black;" +
+            "-fx-border-color: black;" +
             "-fx-border-width: 2;" +
             "-fx-background-radius: 0;" +
             "-fx-border-radius: 0;"
@@ -218,6 +249,10 @@ public class Start extends Application {
         slider.setPrefWidth(SLIDER_WIDTH);
         slider.setMaxWidth(SLIDER_WIDTH);
         slider.setMinWidth(SLIDER_WIDTH);
+        slider.setStyle(
+            "-fx-control-inner-background: black;" +
+            "-fx-accent: black;"
+        );
         return slider;
     }
 

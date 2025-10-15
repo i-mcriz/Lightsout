@@ -15,22 +15,20 @@ public class MarksManager {
     private final IntegerProperty questionsAnswered;
     
     public MarksManager() {
-        this.marks = new SimpleIntegerProperty(0);
+        this.marks = new SimpleIntegerProperty(5);  // Start with 5 marks
         this.correctAnswers = new SimpleIntegerProperty(0);
         this.wrongAnswers = new SimpleIntegerProperty(0);
         this.questionsAnswered = new SimpleIntegerProperty(0);
     }
     
     /**
-     * Add a mark for a correct answer
+     * Add a mark for a correct answer (up to MAX of 5)
      */
     public void addMark() {
-        if (marks.get() < MAX_MARKS) {
-            marks.set(marks.get() + 1);
-            correctAnswers.set(correctAnswers.get() + 1);
-            questionsAnswered.set(questionsAnswered.get() + 1);
-            System.out.println("✓ Correct! Marks: " + marks.get() + "/" + MAX_MARKS);
-        }
+        // Don't add marks - we start with 5 and only deduct
+        correctAnswers.set(correctAnswers.get() + 1);
+        questionsAnswered.set(questionsAnswered.get() + 1);
+        System.out.println("✓ Correct! Marks: " + marks.get() + "/" + MAX_MARKS);
     }
     
     /**
@@ -76,7 +74,8 @@ public class MarksManager {
     }
     
     public boolean isGameComplete() {
-        return questionsAnswered.get() >= TOTAL_QUESTIONS;
+        // Game is complete only when all questions are CORRECTLY answered
+        return correctAnswers.get() >= TOTAL_QUESTIONS;
     }
     
     public double getPercentage() {
@@ -114,11 +113,11 @@ public class MarksManager {
      * Reset all marks and counters
      */
     public void reset() {
-        marks.set(0);
+        marks.set(5);  // Reset to 5 marks
         correctAnswers.set(0);
         wrongAnswers.set(0);
         questionsAnswered.set(0);
-        System.out.println("MarksManager reset.");
+        System.out.println("MarksManager reset - starting with 5 marks.");
     }
     
     @Override

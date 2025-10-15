@@ -10,7 +10,7 @@ set JAVAFX_PATH=C:\Program Files\Java\javafx-sdk-25\lib
 set JDBC_LIB=lib\*
 
 echo [1/3] Compiling Java files...
-javac --module-path "%JAVAFX_PATH%" --add-modules javafx.controls,javafx.media --class-path "%JDBC_LIB%" *.java
+javac --module-path "%JAVAFX_PATH%" --add-modules javafx.controls,javafx.media,javafx.base --class-path "%JDBC_LIB%" *.java
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -28,7 +28,7 @@ echo.
 echo [3/3] Starting game...
 echo.
 
-java --module-path "%JAVAFX_PATH%" --add-modules javafx.controls,javafx.media --class-path ".;%JDBC_LIB%" Start
+java --module-path "%JAVAFX_PATH%" --add-modules javafx.controls,javafx.media,javafx.base --class-path ".;%JDBC_LIB%" Start
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
