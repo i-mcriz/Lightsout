@@ -132,10 +132,10 @@ public class FlickeringLight {
         gc.fillRect(0, 0, screenWidth, screenHeight);
         
         // Clear a circular area around the player (60px radius)
-        double radius = 65; // Changed to 60px as requested
+        double radius = 60;
         
         // Clear the circular cutout area - using clearRect for each pixel in the circle
-        // This creates a sharp, non-blurred circular cutout
+        // This creates a sharp, clean circular cutout
         for (int i = -((int)radius); i <= radius; i++) {
             for (int j = -((int)radius); j <= radius; j++) {
                 double distance = Math.sqrt(i*i + j*j);

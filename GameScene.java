@@ -29,6 +29,7 @@ public class GameScene {
     private Player player;
     private GameMap map;
     private int currentLevel = 1;
+    private int totalDoorsCompleted = 0; // Track total across both levels
 
     private AnimationTimer timer;
     private boolean paused = false;
@@ -78,6 +79,11 @@ public class GameScene {
         System.out.println("=== Lights Out Game Started ===");
         System.out.println("Marks System: Ready (0/" + marksManager.getTotalQuestions() + ")");
     }
+    
+    // Set the level before showing the game
+    public void setLevel(int level) {
+        this.currentLevel = level;
+    }
 
     public void showWithCinematicFadeIn() {
         loadLevel(currentLevel);
@@ -95,7 +101,9 @@ public class GameScene {
 
         // Load level map
         if (levelNum == 1) {
-            map = new Level1(45);  // Make sure Level1 extends GameMap
+            map = new Level1(45);  // Level 1 - 13x13 maze
+        } else if (levelNum == 2) {
+            map = new Level2(35);  // Level 2 - 17x17 larger maze with smaller tiles
         } else {
             Start.showStartMenu(stage, musicPlayer, musicVolume, soundVolume, musicOn, soundOn);
             return;
@@ -384,7 +392,10 @@ public class GameScene {
             System.out.println("Game restarted - progress reset");
             loadLevel(currentLevel);
         });
-        exitBtn.setOnAction(e -> Start.showStartMenu(stage, musicPlayer, musicVolume, soundVolume, musicOn, soundOn));
+        exitBtn.setOnAction(e -> {
+            pauseMenu.setVisible(false);
+            showExitScoreDialog();
+        });
 
         final boolean[] playerFrozen = {false};  // Flag to freeze player at door
         final boolean[] waitingForInput = {false};  // Flag to wait for user input after puzzle
@@ -491,8 +502,11 @@ public class GameScene {
                                 System.out.println("GameScene: puzzle callback for " + door.getPuzzle().getId() + " solved=" + solved);
                                 // If solved, remove visual door from doorsLayer and continue
                                 if (solved) {
-                                    // Add mark for correct answer
+                                    // Add mark for correct answer and track total progress
                                     marksManager.addMark();
+                                    totalDoorsCompleted++;
+                                    
+                                    System.out.println("🎯 Total doors completed: " + totalDoorsCompleted + "/10");
                                     
                                     javafx.application.Platform.runLater(() -> {
                                         javafx.scene.Node n = doorVisualMap.remove(door);
@@ -506,111 +520,196 @@ public class GameScene {
                                             door.getPuzzle().getTimeLimit() * 1000
                                     );
                                     
-                                    // Check if game is complete (all 5 questions answered)
+                                    // Check if current level is complete (5 questions answered in this level)
                                     if (marksManager.isGameComplete()) {
-                                        // All questions answered - UNLOCK EXIT and guide player
-                                        System.out.println("🎉 All questions answered! Unlocking exit...");
-                                        
-                                        // Remove exit barrier
-                                        if (exitBarrier != null && doorsLayer != null && !exitUnlocked) {
-                                            doorsLayer.getChildren().remove(exitBarrier);
-                                            exitBarrier = null;
-                                            exitUnlocked = true;
-                                            System.out.println("🔓 Exit barrier removed - EXIT UNLOCKED");
-                                        }
-                                        
-                                        waitingForInput[0] = true;
-                                        dialogOpen = false;
-                                        
-                                        // Show notification that player should go to exit
-                                        javafx.application.Platform.runLater(() -> {
-                                            javafx.scene.control.Alert exitAlert = new javafx.scene.control.Alert(
-                                                javafx.scene.control.Alert.AlertType.INFORMATION);
-                                            exitAlert.setTitle("All Puzzles Complete!");
-                                            exitAlert.setHeaderText("🎉 Congratulations! 🔓");
-                                            exitAlert.setContentText(
-                                                "You've answered all questions!\n\n" +
-                                                "The EXIT has been UNLOCKED!\n\n" +
-                                                "Make your way to the exit to finish the game.");
+                                        // Current level complete
+                                        if (currentLevel == 1 && totalDoorsCompleted < 10) {
+                                            // Level 1 complete, auto-progress to Level 2
+                                            System.out.println("🎉 Level 1 Complete! Moving to Level 2...");
                                             
-                                            // Apply black background with white text styling
-                                            javafx.scene.control.DialogPane dialogPane = exitAlert.getDialogPane();
-                                            dialogPane.setStyle(
-                                                "-fx-background-color: black;" +
-                                                "-fx-font-family: 'Comic Sans MS';" +
-                                                "-fx-font-size: 16px;"
-                                            );
+                                            waitingForInput[0] = true;
+                                            dialogOpen = false;
                                             
-                                            // Style header
-                                            dialogPane.lookup(".header-panel").setStyle(
-                                                "-fx-background-color: black;"
-                                            );
-                                            javafx.scene.control.Label headerLabel = (javafx.scene.control.Label) dialogPane.lookup(".header-panel .label");
-                                            if (headerLabel != null) {
-                                                headerLabel.setStyle(
-                                                    "-fx-text-fill: white;" +
-                                                    "-fx-font-family: 'Comic Sans MS';" +
-                                                    "-fx-font-size: 20px;" +
-                                                    "-fx-font-weight: bold;"
-                                                );
-                                            }
-                                            
-                                            // Style content
-                                            dialogPane.lookup(".content").setStyle(
-                                                "-fx-background-color: black;"
-                                            );
-                                            javafx.scene.control.Label contentLabel = (javafx.scene.control.Label) dialogPane.lookup(".content .label");
-                                            if (contentLabel != null) {
-                                                contentLabel.setStyle(
-                                                    "-fx-text-fill: white;" +
+                                            // Show Level 2 notification
+                                            javafx.application.Platform.runLater(() -> {
+                                                javafx.scene.control.Alert levelAlert = new javafx.scene.control.Alert(
+                                                    javafx.scene.control.Alert.AlertType.INFORMATION);
+                                                levelAlert.setTitle("Level 1 Complete!");
+                                                levelAlert.setHeaderText("🎉 Great Job! 🎉");
+                                                levelAlert.setContentText(
+                                                    "You've completed Level 1!\n\n" +
+                                                    "Get ready for Level 2...\n\n" +
+                                                    "Progress: " + totalDoorsCompleted + "/10 doors");
+                                                
+                                                // Apply black background with white text styling
+                                                javafx.scene.control.DialogPane dialogPane = levelAlert.getDialogPane();
+                                                dialogPane.setStyle(
+                                                    "-fx-background-color: black;" +
                                                     "-fx-font-family: 'Comic Sans MS';" +
                                                     "-fx-font-size: 16px;"
                                                 );
-                                            }
-                                            
-                                            // Style button
-                                            javafx.scene.control.Button okButton = (javafx.scene.control.Button) dialogPane.lookupButton(javafx.scene.control.ButtonType.OK);
-                                            if (okButton != null) {
-                                                okButton.setStyle(
-                                                    "-fx-background-color: transparent;" +
-                                                    "-fx-text-fill: white;" +
-                                                    "-fx-font-family: 'Comic Sans MS';" +
-                                                    "-fx-font-size: 18px;" +
-                                                    "-fx-font-weight: bold;" +
-                                                    "-fx-border-color: white;" +
-                                                    "-fx-border-width: 2;" +
-                                                    "-fx-background-radius: 0;" +
-                                                    "-fx-border-radius: 0;" +
-                                                    "-fx-padding: 10 30 10 30;"
+                                                
+                                                // Style header
+                                                dialogPane.lookup(".header-panel").setStyle(
+                                                    "-fx-background-color: black;"
                                                 );
-                                                okButton.setOnMouseEntered(e -> okButton.setStyle(
-                                                    "-fx-background-color: white;" +
-                                                    "-fx-text-fill: black;" +
-                                                    "-fx-font-family: 'Comic Sans MS';" +
-                                                    "-fx-font-size: 18px;" +
-                                                    "-fx-font-weight: bold;" +
-                                                    "-fx-border-color: white;" +
-                                                    "-fx-border-width: 2;" +
-                                                    "-fx-background-radius: 0;" +
-                                                    "-fx-border-radius: 0;" +
-                                                    "-fx-padding: 10 30 10 30;"
-                                                ));
-                                                okButton.setOnMouseExited(e -> okButton.setStyle(
-                                                    "-fx-background-color: transparent;" +
-                                                    "-fx-text-fill: white;" +
-                                                    "-fx-font-family: 'Comic Sans MS';" +
-                                                    "-fx-font-size: 18px;" +
-                                                    "-fx-font-weight: bold;" +
-                                                    "-fx-border-color: white;" +
-                                                    "-fx-border-width: 2;" +
-                                                    "-fx-background-radius: 0;" +
-                                                    "-fx-border-radius: 0;" +
-                                                    "-fx-padding: 10 30 10 30;"
-                                                ));
+                                                javafx.scene.control.Label headerLabel = (javafx.scene.control.Label) dialogPane.lookup(".header-panel .label");
+                                                if (headerLabel != null) {
+                                                    headerLabel.setStyle(
+                                                        "-fx-text-fill: white;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 20px;" +
+                                                        "-fx-font-weight: bold;"
+                                                    );
+                                                }
+                                                
+                                                // Style content
+                                                dialogPane.lookup(".content").setStyle(
+                                                    "-fx-background-color: black;"
+                                                );
+                                                javafx.scene.control.Label contentLabel = (javafx.scene.control.Label) dialogPane.lookup(".content .label");
+                                                if (contentLabel != null) {
+                                                    contentLabel.setStyle(
+                                                        "-fx-text-fill: white;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 16px;"
+                                                    );
+                                                }
+                                                
+                                                // Style buttons
+                                                for (javafx.scene.control.ButtonType bt : dialogPane.getButtonTypes()) {
+                                                    javafx.scene.control.Button button = (javafx.scene.control.Button) dialogPane.lookupButton(bt);
+                                                    if (button != null) {
+                                                        button.setStyle(
+                                                            "-fx-background-color: white;" +
+                                                            "-fx-text-fill: black;" +
+                                                            "-fx-font-family: 'Comic Sans MS';" +
+                                                            "-fx-font-size: 14px;" +
+                                                            "-fx-border-color: black;" +
+                                                            "-fx-border-width: 2px;"
+                                                        );
+                                                    }
+                                                }
+                                                
+                                                levelAlert.showAndWait();
+                                                
+                                                // Stop current timer and load Level 2
+                                                if (timer != null) {
+                                                    timer.stop();
+                                                }
+                                                
+                                                // Reset marks manager for Level 2
+                                                marksManager = new MarksManager();
+                                                
+                                                // Load Level 2
+                                                currentLevel = 2;
+                                                loadLevel(2);
+                                            });
+                                        } else if (totalDoorsCompleted >= 10) {
+                                            // All 10 doors complete - UNLOCK EXIT and show final marks
+                                            System.out.println("🎉 All 10 questions answered! Unlocking exit...");
+                                            
+                                            // Remove exit barrier
+                                            if (exitBarrier != null && doorsLayer != null && !exitUnlocked) {
+                                                doorsLayer.getChildren().remove(exitBarrier);
+                                                exitBarrier = null;
+                                                exitUnlocked = true;
+                                                System.out.println("🔓 Exit barrier removed - EXIT UNLOCKED");
                                             }
                                             
-                                            exitAlert.showAndWait();
-                                        });
+                                            waitingForInput[0] = true;
+                                            dialogOpen = false;
+                                            
+                                            // Show notification with marks
+                                            javafx.application.Platform.runLater(() -> {
+                                                javafx.scene.control.Alert exitAlert = new javafx.scene.control.Alert(
+                                                    javafx.scene.control.Alert.AlertType.INFORMATION);
+                                                exitAlert.setTitle("All Puzzles Complete!");
+                                                exitAlert.setHeaderText("🎉 Congratulations! 🔓");
+                                                exitAlert.setContentText(
+                                                    "You've answered all questions!\n\n" +
+                                                    "The EXIT has been UNLOCKED!\n\n" +
+                                                    "Make your way to the exit to finish the game.");
+                                                
+                                                // Apply black background with white text styling
+                                                javafx.scene.control.DialogPane dialogPane = exitAlert.getDialogPane();
+                                                dialogPane.setStyle(
+                                                    "-fx-background-color: black;" +
+                                                    "-fx-font-family: 'Comic Sans MS';" +
+                                                    "-fx-font-size: 16px;"
+                                                );
+                                                
+                                                // Style header
+                                                dialogPane.lookup(".header-panel").setStyle(
+                                                    "-fx-background-color: black;"
+                                                );
+                                                javafx.scene.control.Label headerLabel = (javafx.scene.control.Label) dialogPane.lookup(".header-panel .label");
+                                                if (headerLabel != null) {
+                                                    headerLabel.setStyle(
+                                                        "-fx-text-fill: white;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 20px;" +
+                                                        "-fx-font-weight: bold;"
+                                                    );
+                                                }
+                                                
+                                                // Style content
+                                                dialogPane.lookup(".content").setStyle(
+                                                    "-fx-background-color: black;"
+                                                );
+                                                javafx.scene.control.Label contentLabel = (javafx.scene.control.Label) dialogPane.lookup(".content .label");
+                                                if (contentLabel != null) {
+                                                    contentLabel.setStyle(
+                                                        "-fx-text-fill: white;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 16px;"
+                                                    );
+                                                }
+                                                
+                                                // Style button
+                                                javafx.scene.control.Button okButton = (javafx.scene.control.Button) dialogPane.lookupButton(javafx.scene.control.ButtonType.OK);
+                                                if (okButton != null) {
+                                                    okButton.setStyle(
+                                                        "-fx-background-color: transparent;" +
+                                                        "-fx-text-fill: white;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 18px;" +
+                                                        "-fx-font-weight: bold;" +
+                                                        "-fx-border-color: white;" +
+                                                        "-fx-border-width: 2;" +
+                                                        "-fx-background-radius: 0;" +
+                                                        "-fx-border-radius: 0;" +
+                                                        "-fx-padding: 10 30 10 30;"
+                                                    );
+                                                    okButton.setOnMouseEntered(e -> okButton.setStyle(
+                                                        "-fx-background-color: white;" +
+                                                        "-fx-text-fill: black;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 18px;" +
+                                                        "-fx-font-weight: bold;" +
+                                                        "-fx-border-color: white;" +
+                                                        "-fx-border-width: 2;" +
+                                                        "-fx-background-radius: 0;" +
+                                                        "-fx-border-radius: 0;" +
+                                                        "-fx-padding: 10 30 10 30;"
+                                                    ));
+                                                    okButton.setOnMouseExited(e -> okButton.setStyle(
+                                                        "-fx-background-color: transparent;" +
+                                                        "-fx-text-fill: white;" +
+                                                        "-fx-font-family: 'Comic Sans MS';" +
+                                                        "-fx-font-size: 18px;" +
+                                                        "-fx-font-weight: bold;" +
+                                                        "-fx-border-color: white;" +
+                                                        "-fx-border-width: 2;" +
+                                                        "-fx-background-radius: 0;" +
+                                                        "-fx-border-radius: 0;" +
+                                                        "-fx-padding: 10 30 10 30;"
+                                                    ));
+                                                }
+                                                
+                                                exitAlert.showAndWait();
+                                            });
+                                        }
                                     } else {
                                         // Wait for user input to continue
                                         waitingForInput[0] = true;
@@ -694,18 +793,88 @@ public class GameScene {
                 // Check exit - only allow if all questions are answered
                 if (map.isOnExit(player.getCenterX(), player.getCenterY())) {
                     if (marksManager.isGameComplete()) {
-                        // All questions answered - show marks and allow exit
-                        System.out.println("EXIT UNLOCKED - Showing final score");
-                        stop();
-                        timer.stop();
-                        
-                        // Show marks display at exit
-                        if (marksText != null) {
-                            marksText.setVisible(true);
+                        if (currentLevel == 1 && totalDoorsCompleted < 10) {
+                            // Level 1 complete, transition to Level 2
+                            System.out.println("EXIT REACHED - Moving to Level 2");
+                            timer.stop();
+                            
+                            // Show Level 2 transition dialog
+                            javafx.application.Platform.runLater(() -> {
+                                javafx.scene.control.Alert levelAlert = new javafx.scene.control.Alert(
+                                    javafx.scene.control.Alert.AlertType.INFORMATION);
+                                levelAlert.setTitle("Level 1 Complete!");
+                                levelAlert.setHeaderText("🎉 Great Job! 🎉");
+                                levelAlert.setContentText(
+                                    "You've completed Level 1!\n\n" +
+                                    "Get ready for Level 2...\n\n" +
+                                    "Progress: " + totalDoorsCompleted + "/10 doors");
+                                
+                                // Apply styling
+                                javafx.scene.control.DialogPane dialogPane = levelAlert.getDialogPane();
+                                dialogPane.setStyle(
+                                    "-fx-background-color: black;" +
+                                    "-fx-font-family: 'Comic Sans MS';" +
+                                    "-fx-font-size: 16px;"
+                                );
+                                
+                                dialogPane.lookup(".header-panel").setStyle("-fx-background-color: black;");
+                                javafx.scene.control.Label headerLabel = (javafx.scene.control.Label) dialogPane.lookup(".header-panel .label");
+                                if (headerLabel != null) {
+                                    headerLabel.setStyle(
+                                        "-fx-text-fill: white;" +
+                                        "-fx-font-family: 'Comic Sans MS';" +
+                                        "-fx-font-size: 20px;" +
+                                        "-fx-font-weight: bold;"
+                                    );
+                                }
+                                
+                                dialogPane.lookup(".content").setStyle("-fx-background-color: black;");
+                                javafx.scene.control.Label contentLabel = (javafx.scene.control.Label) dialogPane.lookup(".content .label");
+                                if (contentLabel != null) {
+                                    contentLabel.setStyle(
+                                        "-fx-text-fill: white;" +
+                                        "-fx-font-family: 'Comic Sans MS';" +
+                                        "-fx-font-size: 16px;"
+                                    );
+                                }
+                                
+                                for (javafx.scene.control.ButtonType bt : dialogPane.getButtonTypes()) {
+                                    javafx.scene.control.Button button = (javafx.scene.control.Button) dialogPane.lookupButton(bt);
+                                    if (button != null) {
+                                        button.setStyle(
+                                            "-fx-background-color: white;" +
+                                            "-fx-text-fill: black;" +
+                                            "-fx-font-family: 'Comic Sans MS';" +
+                                            "-fx-font-size: 14px;" +
+                                            "-fx-border-color: black;" +
+                                            "-fx-border-width: 2px;"
+                                        );
+                                    }
+                                }
+                                
+                                levelAlert.showAndWait();
+                                
+                                // Reset marks manager for Level 2
+                                marksManager = new MarksManager();
+                                
+                                // Load Level 2
+                                currentLevel = 2;
+                                loadLevel(2);
+                            });
+                        } else if (totalDoorsCompleted >= 10) {
+                            // All 10 doors complete - show final marks
+                            System.out.println("EXIT UNLOCKED - Showing final score");
+                            stop();
+                            timer.stop();
+                            
+                            // Show marks display at exit
+                            if (marksText != null) {
+                                marksText.setVisible(true);
+                            }
+                            
+                            // Show final score screen
+                            showFinalScoreScreen();
                         }
-                        
-                        // Show final score screen
-                        showFinalScoreScreen();
                     }
                 }
             }
@@ -713,6 +882,13 @@ public class GameScene {
         timer.start();
 
         stage.setScene(finalScene);
+        
+        // Add window close handler to show current score before closing
+        stage.setOnCloseRequest(event -> {
+            event.consume(); // Prevent immediate close
+            showExitScoreDialog();
+        });
+        
     // Ensure the gameStack receives key focus so movement keys are processed
     gameStack.requestFocus();
 
@@ -749,14 +925,89 @@ public class GameScene {
             System.out.println("⚠ Warning: Only " + puzzles.size() + " puzzles loaded (expected 5)");
         }
         
-        for (Puzzle puzzle : puzzles) {
-            list.add(new PuzzleDoor(puzzle));
-            System.out.println("  📋 Door at (" + puzzle.getRow() + "," + puzzle.getCol() + "): " + 
-                             puzzle.getSubject() + " - " + puzzle.getQuestion().substring(0, Math.min(40, puzzle.getQuestion().length())) + "...");
+        // Get all valid spawn positions for doors (empty tiles away from player spawn)
+        List<int[]> validPositions = getValidDoorPositions();
+        
+        if (validPositions.size() < puzzles.size()) {
+            System.out.println("⚠ Warning: Not enough valid positions for all doors!");
         }
         
-        System.out.println("✓ Loaded " + list.size() + " puzzle doors");
+        // Randomly assign positions to puzzles
+        java.util.Random rand = new java.util.Random();
+        for (int i = 0; i < puzzles.size() && i < validPositions.size(); i++) {
+            Puzzle originalPuzzle = puzzles.get(i);
+            
+            // Pick a random position from remaining valid positions
+            int posIndex = rand.nextInt(validPositions.size());
+            int[] pos = validPositions.remove(posIndex);
+            int newRow = pos[0];
+            int newCol = pos[1];
+            
+            // Create a new Puzzle with the randomized position
+            Puzzle randomizedPuzzle = new Puzzle(
+                originalPuzzle.getId(),
+                originalPuzzle.getSubject(),
+                originalPuzzle.getType(),
+                originalPuzzle.getQuestion(),
+                originalPuzzle.getOptions(),
+                originalPuzzle.getAnswerIndex(),
+                originalPuzzle.getContentText(),
+                originalPuzzle.getTimeLimit(),
+                newRow,
+                newCol
+            );
+            
+            list.add(new PuzzleDoor(randomizedPuzzle));
+            System.out.println("  📋 Door at (" + newRow + "," + newCol + "): " + 
+                             originalPuzzle.getSubject() + " - " + originalPuzzle.getQuestion().substring(0, Math.min(40, originalPuzzle.getQuestion().length())) + "...");
+        }
+        
+        System.out.println("✓ Loaded " + list.size() + " puzzle doors with randomized positions");
         return list;
+    }
+    
+    /**
+     * Get all valid positions for door placement:
+     * - Must be on empty path tiles (value = 0)
+     * - Must be at least 3 tiles away from player spawn point
+     * - Must not be the exit tile
+     */
+    private List<int[]> getValidDoorPositions() {
+        List<int[]> validPositions = new ArrayList<>();
+        int[][] layout = map.getLayout();
+        
+        // Find player spawn tile (first empty tile)
+        int spawnRow = -1, spawnCol = -1;
+        outer:
+        for (int r = 0; r < layout.length; r++) {
+            for (int c = 0; c < layout[r].length; c++) {
+                if (layout[r][c] == 0) {
+                    spawnRow = r;
+                    spawnCol = c;
+                    break outer;
+                }
+            }
+        }
+        
+        // Collect all valid empty tiles that are far from spawn
+        final int MIN_DISTANCE = 3; // minimum tile distance from spawn
+        for (int r = 0; r < layout.length; r++) {
+            for (int c = 0; c < layout[r].length; c++) {
+                // Must be a path tile (0 = empty path)
+                if (layout[r][c] == 0) {
+                    // Calculate Manhattan distance from spawn point
+                    int distance = Math.abs(r - spawnRow) + Math.abs(c - spawnCol);
+                    
+                    // Must be far enough from spawn
+                    if (distance >= MIN_DISTANCE) {
+                        validPositions.add(new int[]{r, c});
+                    }
+                }
+            }
+        }
+        
+        System.out.println("🎲 Found " + validPositions.size() + " valid door positions (spawn at " + spawnRow + "," + spawnCol + ")");
+        return validPositions;
     }
     
     /**
@@ -803,20 +1054,29 @@ public class GameScene {
         titleText.setFill(Color.WHITE);
         titleText.setStyle("-fx-font-weight: bold;");
         
-        Text scoreText = new Text(String.format("Final Score: %d / %d", 
-                                   marksManager.getMarks(), marksManager.getTotalQuestions()));
+        // Calculate final score out of 10 (total doors completed)
+        Text scoreText = new Text(String.format("Final Score: %d / 10", totalDoorsCompleted));
         scoreText.setFont(Font.font("Comic Sans MS", 28));
         scoreText.setFill(Color.WHITE);
         
-        Text gradeText = new Text("Grade: " + marksManager.getGrade());
+        // Calculate grade based on 10 questions
+        String grade;
+        double percentage = (totalDoorsCompleted / 10.0) * 100;
+        if (percentage >= 90) grade = "A+";
+        else if (percentage >= 80) grade = "A";
+        else if (percentage >= 70) grade = "B";
+        else if (percentage >= 60) grade = "C";
+        else if (percentage >= 50) grade = "D";
+        else grade = "F";
+        
+        Text gradeText = new Text("Grade: " + grade);
         gradeText.setFont(Font.font("Comic Sans MS", 36));
         gradeText.setStyle("-fx-font-weight: bold;");
         gradeText.setFill(Color.WHITE);
         
-        Text detailsText = new Text(String.format("✓ Correct: %d | ✗ Wrong: %d | Percentage: %.0f%%",
-                                    marksManager.getCorrectAnswers(),
-                                    marksManager.getWrongAnswers(),
-                                    marksManager.getPercentage()));
+        Text detailsText = new Text(String.format("✓ Doors Completed: %d | Percentage: %.0f%%",
+                                    totalDoorsCompleted,
+                                    percentage));
         detailsText.setFont(Font.font("Comic Sans MS", 18));
         detailsText.setFill(Color.WHITE);
         
@@ -869,6 +1129,201 @@ public class GameScene {
         System.out.println("\n" + "=".repeat(50));
         System.out.println("FINAL SCORE: " + marksManager);
         System.out.println("=".repeat(50));
+    }
+    
+    /**
+     * Show exit score dialog when user closes the game or exits to menu
+     */
+    private void showExitScoreDialog() {
+        // Pause the game timer temporarily
+        boolean wasRunning = (timer != null);
+        if (timer != null) {
+            timer.stop();
+        }
+        
+        // Pause the game
+        paused = true;
+        
+        // Create score summary dialog with Cancel option
+        javafx.scene.control.Alert exitAlert = new javafx.scene.control.Alert(
+            javafx.scene.control.Alert.AlertType.CONFIRMATION);
+        exitAlert.setTitle("Game Progress");
+        exitAlert.setHeaderText("🎯 Current Score");
+        
+        // Calculate current grade based on total progress
+        double percentage = (totalDoorsCompleted / 10.0) * 100;
+        String grade;
+        if (percentage >= 90) grade = "A+";
+        else if (percentage >= 80) grade = "A";
+        else if (percentage >= 70) grade = "B";
+        else if (percentage >= 60) grade = "C";
+        else if (percentage >= 50) grade = "D";
+        else grade = "F";
+        
+        // Build score details showing progress out of 10
+        String scoreDetails = String.format(
+            "Score Achieved: %d\n" +
+            "Total Score: 10\n\n" +
+            "Doors Completed: %d / 10\n" +
+            "Level: %d\n" +
+            "Percentage: %.0f%%\n" +
+            "Grade: %s",
+            totalDoorsCompleted,
+            totalDoorsCompleted,
+            currentLevel,
+            percentage,
+            grade
+        );
+        
+        exitAlert.setContentText(scoreDetails);
+        
+        // Apply black background with white text styling
+        javafx.scene.control.DialogPane dialogPane = exitAlert.getDialogPane();
+        dialogPane.setStyle(
+            "-fx-background-color: black;" +
+            "-fx-font-family: 'Comic Sans MS';" +
+            "-fx-font-size: 16px;"
+        );
+        
+        // Style header
+        dialogPane.lookup(".header-panel").setStyle(
+            "-fx-background-color: black;"
+        );
+        javafx.scene.control.Label headerLabel = (javafx.scene.control.Label) dialogPane.lookup(".header-panel .label");
+        if (headerLabel != null) {
+            headerLabel.setStyle(
+                "-fx-text-fill: white;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 20px;" +
+                "-fx-font-weight: bold;"
+            );
+        }
+        
+        // Style content
+        dialogPane.lookup(".content").setStyle(
+            "-fx-background-color: black;"
+        );
+        javafx.scene.control.Label contentLabel = (javafx.scene.control.Label) dialogPane.lookup(".content .label");
+        if (contentLabel != null) {
+            contentLabel.setStyle(
+                "-fx-text-fill: white;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 16px;"
+            );
+        }
+        
+        // Style OK button (Exit to Menu)
+        javafx.scene.control.Button okButton = (javafx.scene.control.Button) dialogPane.lookupButton(javafx.scene.control.ButtonType.OK);
+        if (okButton != null) {
+            okButton.setText("Exit to Menu");
+            okButton.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-color: white;" +
+                "-fx-border-width: 2;" +
+                "-fx-background-radius: 0;" +
+                "-fx-border-radius: 0;" +
+                "-fx-padding: 10 30 10 30;"
+            );
+            okButton.setOnMouseEntered(e -> okButton.setStyle(
+                "-fx-background-color: white;" +
+                "-fx-text-fill: black;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-color: white;" +
+                "-fx-border-width: 2;" +
+                "-fx-background-radius: 0;" +
+                "-fx-border-radius: 0;" +
+                "-fx-padding: 10 30 10 30;"
+            ));
+            okButton.setOnMouseExited(e -> okButton.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-color: white;" +
+                "-fx-border-width: 2;" +
+                "-fx-background-radius: 0;" +
+                "-fx-border-radius: 0;" +
+                "-fx-padding: 10 30 10 30;"
+            ));
+        }
+        
+        // Style Cancel button (Return to Game)
+        javafx.scene.control.Button cancelButton = (javafx.scene.control.Button) dialogPane.lookupButton(javafx.scene.control.ButtonType.CANCEL);
+        if (cancelButton != null) {
+            cancelButton.setText("Return to Game");
+            cancelButton.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-color: white;" +
+                "-fx-border-width: 2;" +
+                "-fx-background-radius: 0;" +
+                "-fx-border-radius: 0;" +
+                "-fx-padding: 10 30 10 30;"
+            );
+            cancelButton.setOnMouseEntered(e -> cancelButton.setStyle(
+                "-fx-background-color: white;" +
+                "-fx-text-fill: black;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-color: white;" +
+                "-fx-border-width: 2;" +
+                "-fx-background-radius: 0;" +
+                "-fx-border-radius: 0;" +
+                "-fx-padding: 10 30 10 30;"
+            ));
+            cancelButton.setOnMouseExited(e -> cancelButton.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-family: 'Comic Sans MS';" +
+                "-fx-font-size: 18px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-color: white;" +
+                "-fx-border-width: 2;" +
+                "-fx-background-radius: 0;" +
+                "-fx-border-radius: 0;" +
+                "-fx-padding: 10 30 10 30;"
+            ));
+        }
+        
+        // Show dialog and check user's choice
+        java.util.Optional<javafx.scene.control.ButtonType> result = exitAlert.showAndWait();
+        
+        // Check if user clicked OK (Exit to Menu) or Cancel/X button
+        if (result.isPresent() && result.get() == javafx.scene.control.ButtonType.OK) {
+            // User wants to exit - clean up and return to main menu
+            cleanup();
+            
+            // Clear the close handler before returning to menu so it doesn't trigger again
+            stage.setOnCloseRequest(null);
+            
+            Start.showStartMenu(stage, musicPlayer, musicVolume, soundVolume, musicOn, soundOn);
+            
+            System.out.println("Exited game - Score: " + marksManager.getMarks() + "/" + marksManager.getTotalQuestions());
+        } else {
+            // User clicked Cancel or X button - resume the game
+            paused = false;
+            if (wasRunning && timer != null) {
+                timer.start();
+            }
+            
+            // Resume light effect if it exists
+            if (lightEffect != null) {
+                lightEffect.resume();
+            }
+            
+            System.out.println("Resumed game - Score: " + marksManager.getMarks() + "/" + marksManager.getTotalQuestions());
+        }
     }
     
     /**

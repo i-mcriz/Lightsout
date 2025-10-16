@@ -153,6 +153,17 @@ public class Start extends Application {
         });
 
         exitBtn.setOnAction(e -> stage.close());
+        
+        // Start Game button action
+        startBtn.setOnAction(e -> {
+            GameScene gs = new GameScene(stage, musicPlayer,
+                                        musicSlider.getValue(),
+                                        soundSlider.getValue(),
+                                        !musicPlayer.isMute(),
+                                        !soundBtn.getText().contains("🔇"));
+            gs.setLevel(1); // Start at Level 1
+            gs.showWithCinematicFadeIn();
+        });
 
         // --- Layout ---
         VBox menuBox = new VBox(GAP_PX,
